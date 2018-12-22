@@ -1,0 +1,90 @@
+#!/bin/sh /etc/rc.common
+
+START=19
+USE_PROCD=1
+VERBOSITY=""
+QUIET=-q
+DEBUG=-d
+
+ROVER_HOME="/opt/symantec/rover"
+ROVER_BIN_DIR="${ROVER_HOME}/bin"
+
+# Create this file to inform firewall_mgr to reload the previous settings when it restarts.
+mkdir -p ${ROVER_HOME}/var
+FWM_DO_RELOAD_FILE="${ROVER_HOME}/var/firewall_mgr_do_reload.txt"
+
+validate_firewall_redirect() {
+	uci_validate_section firewall redirect "${1}" \
+		'proto:or(uinteger, string)' \
+		'src:string' \
+		'src_ip:cidr' \
+		'src_dport:or(port, portrange)' \
+		'dest:string' \
+		'dest_ip:cidr' \
+		'dest_port:or(port, portrange)' \
+		'target:or("SNAT", "DNAT")'
+}
+
+validate_firewall_rule() {
+	uci_validate_section firewall rule "${1}" \
+		'proto:or(uinteger, string)' \
+		'src:string' \
+		'dest:string' \
+		'src_port:or(port, portrange)' \
+		'dest_port:or(port, portrange)' \
+		'target:string'
+}
+
+service_triggers() {
+	procd_add_reload_trigger firewall
+
+	procd_open_validate
+	validate_firewall_redirect
+	validate_firewall_rule
+	procd_close_validate
+}
+
+restart() {
+	VERBOSITY=${QUIET}
+
+	# Stop firewall_mgr.
+	killall firewall_mgr
+
+	# Flush all rules and reload.
+	fw3 ${VERBOSITY} flush
+	touch ${FWM_DO_RELOAD_FILE}
+	fw3 ${VERBOSITY} start
+
+	# Start firewall_mgr
+	$ROVER_BIN_DIR/firewall_mgr.sh &
+}
+
+start_service() {
+	VERBOSITY=${QUIET}
+
+	fw3 ${VERBOSITY} start
+	${ROVER_BIN_DIR}/firewall_mgr.sh &
+}
+
+stop_service() {
+	VERBOSITY=${QUIET}
+
+	killall firewall_mgr
+	touch ${FWM_DO_RELOAD_FILE}
+	fw3 ${VERBOSITY} flush
+}
+
+reload_service() {
+	VERBOSITY=${QUIET}
+
+	# This command won't flush the user chains.
+	fw3 ${VERBOSITY} reload
+}
+
+boot() {
+	# Be silent on boot, firewall might be started by hotplug already,
+	# so don't complain in syslog.
+	VERBOSITY=${QUIET}
+
+	start
+}

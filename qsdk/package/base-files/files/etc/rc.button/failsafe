@@ -1,0 +1,7 @@
+#!/bin/sh
+
+[ "${TYPE}" = "switch" ] || echo ${BUTTON} > /tmp/failsafe_button
+# Ignore failsafe mode
+sync
+reboot -f
+return 0

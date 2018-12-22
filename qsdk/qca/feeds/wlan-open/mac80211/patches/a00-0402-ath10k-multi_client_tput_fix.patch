@@ -1,0 +1,38 @@
+diff --git a/drivers/net/wireless/ath/ath10k/htt_rx.c b/drivers/net/wireless/ath/ath10k/htt_rx.c
+index 78a3321576cf..7cb91bf32f6b 100644
+--- a/drivers/net/wireless/ath/ath10k/htt_rx.c
++++ b/drivers/net/wireless/ath/ath10k/htt_rx.c
+@@ -2436,6 +2436,8 @@ static void ath10k_htt_txrx_compl_task(unsigned long ptr)
+ 	while (kfifo_get(&htt->txdone_fifo, &tx_done))
+ 		ath10k_txrx_tx_unref(htt, &tx_done);
+ 
++	ath10k_mac_tx_push_pending(ar);
++
+ 	while ((skb = __skb_dequeue(&tx_ind_q))) {
+ 		ath10k_htt_rx_tx_fetch_ind(ar, skb);
+ 		dev_kfree_skb_any(skb);
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index 96571c958957..b7cb0ba3b506 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -7967,6 +7967,7 @@ int ath10k_mac_register(struct ath10k *ar)
+ 				   NL80211_FEATURE_AP_SCAN;
+ 
+ 	ar->hw->wiphy->max_ap_assoc_sta = ar->max_num_stations;
++	ar->hw->txq_ac_max_pending = 2048;
+ 
+ 	ret = ath10k_wow_init(ar);
+ 	if (ret) {
+diff --git a/drivers/net/wireless/ath/ath10k/txrx.c b/drivers/net/wireless/ath/ath10k/txrx.c
+index 4d49de92ccdb..9031547439c3 100644
+--- a/drivers/net/wireless/ath/ath10k/txrx.c
++++ b/drivers/net/wireless/ath/ath10k/txrx.c
+@@ -118,8 +118,6 @@ int ath10k_txrx_tx_unref(struct ath10k_htt *htt,
+ 	ieee80211_tx_status(htt->ar->hw, msdu);
+ 	/* we do not own the msdu anymore */
+ 
+-	ath10k_mac_tx_push_pending(ar);
+-
+ 	return 0;
+ }
+ 

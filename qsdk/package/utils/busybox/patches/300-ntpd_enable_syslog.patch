@@ -1,0 +1,44 @@
+--- a/networking/ntpd.c	2016-11-08 12:45:52.168519217 -0800
++++ b/networking/ntpd.c	2016-11-08 12:54:01.008528394 -0800
+@@ -56,6 +56,7 @@
+ #include <netinet/ip.h> /* For IPTOS_LOWDELAY definition */
+ #include <sys/resource.h> /* setpriority */
+ #include <sys/timex.h>
++#include <syslog.h>
+ #ifndef IPTOS_LOWDELAY
+ # define IPTOS_LOWDELAY 0x10
+ #endif
+@@ -216,6 +217,7 @@
+ 
+ #define NUM_DATAPOINTS  8
+ 
++#define ROVER_LIMIT (4*60)
+ typedef struct {
+ 	uint32_t int_partl;
+ 	uint32_t fractionl;
+@@ -1899,6 +1901,13 @@
+ 	/* Muck with statictics and update the clock */
+ 	filter_datapoints(p);
+ 	q = select_and_cluster();
++
++	// Force ntpd to do a one-time adjustment when the initial time is far off 
++	if (!q && fabs(offset) > ROVER_LIMIT) {
++		// Make sure the adjusted time is not ahead of real time
++		p->filter_offset -= p->lastpkt_delay;
++		q = p;
++	}
+ 	rc = 0;
+ 	if (q) {
+ 		if (!(option_mask32 & OPT_w)) {
+@@ -2203,6 +2212,11 @@
+ 		bb_daemonize_or_rexec(DAEMON_DEVNULL_STDIO, argv);
+ 		logmode = LOGMODE_NONE;
+ 	}
++	else {
++		openlog(applet_name, LOG_PID | LOG_NDELAY, LOG_DAEMON);
++		logmode |= LOGMODE_SYSLOG;
++	}
++
+ 	/* I hesitate to set -20 prio. -15 should be high enough for timekeeping */
+ 	if (opts & OPT_N)
+ 		setpriority(PRIO_PROCESS, 0, -15);

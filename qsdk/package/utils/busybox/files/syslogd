@@ -1,0 +1,81 @@
+#!/bin/sh /etc/rc.common
+# Copyright (c) 2016 Symantec Corporation
+
+START=20
+
+USE_PROCD=1
+PROG=/sbin/syslogd
+PROG1=/sbin/klogd
+LOG_LOCATION=/var/log/messages
+
+validate_syslog_section() {
+	uci_validate_section system system "${1}" \
+		'log_file:string' \
+		'log_size:uinteger' \
+		'log_rotate:uinteger'
+
+}
+
+validate_log_daemon()
+{
+	uci_validate_section system system "${1}"\
+		'log_file:string' \
+		'log_size:uinteger:0' \
+		'log_rotate:uinteger:0'
+}
+
+
+start_log_daemon() {
+	local log log_file log_size log_rotate
+	
+	validate_log_daemon "${1}"
+
+	[ -z "${log_file}" ] && log=$LOG_LOCATION
+	[ -z "${log}" ] && log=$log_file
+
+	echo "Create log files@ $log" > /dev/kmsg
+
+	[ -z "$log" ] && {
+		echo "Can not determine location: $log" > /dev/kmsg
+		return 1
+	}
+
+	[ ! -f $log ] && touch $log
+	# what if uci config location wrong 
+	# and we can not create file ?
+	if [ ! -f $log ]; then
+		log=$LOG_LOCATION
+		touch $log
+	else
+		[ ! -f "$LOG_LOCATION" ] && ln -s $log $LOG_LOCATION
+	fi
+
+	echo "TRY START SYSLOG" > /dev/kmsg
+
+	procd_open_instance
+	procd_set_param command "$PROG" -n -S
+	[ ! -z "${log}" ] &&  procd_append_param command -O "$log"
+	[ "${log_size}"  -ne  0 ] && procd_append_param command -s "$log_size"
+	[ "${log_rotate}" -ne 0 ] && procd_append_param command -b "$log_rotate"
+	procd_set_param respawn
+	procd_close_instance
+}
+
+start_service_klog() {
+	procd_open_instance 
+	procd_set_param command "$PROG1" -n
+	procd_set_param respawn
+	procd_close_instance
+}
+
+start_service() {
+	config_load system
+	config_foreach start_log_daemon system
+	start_service_klog
+}
+
+service_triggers()
+{
+	procd_add_reload_trigger "system"
+	procd_add_validation validate_syslog_section 
+}

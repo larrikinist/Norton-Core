@@ -1,0 +1,23 @@
+--- a/Makefile.am       2014-10-24 02:21:20.000000000 -0700
++++ b/Makefile.am       2017-07-24 15:06:02.813093180 -0700
+@@ -87,7 +87,6 @@
+ include schedutils/Makemodule.am
+ include text-utils/Makemodule.am
+ include term-utils/Makemodule.am
+-include login-utils/Makemodule.am
+ include sys-utils/Makemodule.am
+ include misc-utils/Makemodule.am
+ include disk-utils/Makemodule.am
+--- a/lib/Makemodule.am 2014-10-24 02:21:20.000000000 -0700
++++ b/lib/Makemodule.am 2017-07-24 15:08:43.661092840 -0700
+@@ -25,8 +25,7 @@
+	lib/timeutils.c \
+	lib/ttyutils.c \
+	lib/xgetpass.c \
+-	lib/exec_shell.c \
+-	lib/readutmp.c
++ 	lib/exec_shell.c
+
+ if LINUX
+ libcommon_la_SOURCES += \
+

@@ -1,0 +1,119 @@
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index ef15e3a..51cd351 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -6970,42 +6970,6 @@ static void ath10k_sta_rc_update(struct ieee80211_hw *hw,
+ 	ieee80211_queue_work(hw, &arsta->update_wk);
+ }
+ 
+-static u64 ath10k_get_tsf(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
+-{
+-	/*
+-	 * FIXME: Return 0 for time being. Need to figure out whether FW
+-	 * has the API to fetch 64-bit local TSF
+-	 */
+-
+-	return 0;
+-}
+-
+-static void ath10k_set_tsf(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+-			   u64 tsf)
+-{
+-	struct ath10k *ar = hw->priv;
+-	struct ath10k_vif *arvif = ath10k_vif_to_arvif(vif);
+-	u32 tsf_offset, vdev_param = ar->wmi.vdev_param->set_tsf;
+-	int ret;
+-
+-	/* Workaround:
+-	 *
+-	 * Given tsf argument is entire TSF value, but firmware accepts
+-	 * only TSF offset to current TSF.
+-	 *
+-	 * get_tsf function is used to get offset value, however since
+-	 * ath10k_get_tsf is not implemented properly, it will return 0 always.
+-	 * Luckily all the caller functions to set_tsf, as of now, also rely on
+-	 * get_tsf function to get entire tsf value such get_tsf() + tsf_delta,
+-	 * final tsf offset value to firmware will be arithmetically correct.
+-	 */
+-	tsf_offset = tsf - ath10k_get_tsf(hw, vif);
+-	ret = ath10k_wmi_vdev_set_param(ar, arvif->vdev_id,
+-					vdev_param, tsf_offset);
+-	if (ret && ret != -EOPNOTSUPP)
+-		ath10k_warn(ar, "failed to set tsf offset: %d\n", ret);
+-}
+-
+ static void ath10k_offset_tsf(struct ieee80211_hw *hw,
+ 			      struct ieee80211_vif *vif, s64 tsf_offset)
+ {
+@@ -7514,8 +7478,6 @@ static const struct ieee80211_ops ath10k_ops = {
+ 	.get_survey			= ath10k_get_survey,
+ 	.set_bitrate_mask		= ath10k_mac_op_set_bitrate_mask,
+ 	.sta_rc_update			= ath10k_sta_rc_update,
+-	.get_tsf			= ath10k_get_tsf,
+-	.set_tsf			= ath10k_set_tsf,
+ 	.offset_tsf			= ath10k_offset_tsf,
+ 	.ampdu_action			= ath10k_ampdu_action,
+ 	.get_et_sset_count		= ath10k_debug_get_et_sset_count,
+diff --git a/drivers/net/wireless/ath/ath10k/wmi-tlv.c b/drivers/net/wireless/ath/ath10k/wmi-tlv.c
+index a90fc1f..2a58a27 100644
+--- a/drivers/net/wireless/ath/ath10k/wmi-tlv.c
++++ b/drivers/net/wireless/ath/ath10k/wmi-tlv.c
+@@ -3409,7 +3409,6 @@ static struct wmi_vdev_param_map wmi_tlv_vdev_param_map = {
+ 	.meru_vc = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.rx_decap_type = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.bw_nss_ratemask = WMI_VDEV_PARAM_UNSUPPORTED,
+-	.set_tsf = WMI_VDEV_PARAM_UNSUPPORTED,
+ };
+ 
+ static const struct wmi_ops wmi_tlv_ops = {
+diff --git a/drivers/net/wireless/ath/ath10k/wmi.c b/drivers/net/wireless/ath/ath10k/wmi.c
+index 954f89c..b7abf80 100644
+--- a/drivers/net/wireless/ath/ath10k/wmi.c
++++ b/drivers/net/wireless/ath/ath10k/wmi.c
+@@ -802,7 +802,6 @@ static struct wmi_vdev_param_map wmi_vdev_param_map = {
+ 	.meru_vc = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.rx_decap_type = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.bw_nss_ratemask = WMI_VDEV_PARAM_UNSUPPORTED,
+-	.set_tsf = WMI_VDEV_PARAM_UNSUPPORTED,
+ };
+ 
+ /* 10.X WMI VDEV param map */
+@@ -878,7 +877,6 @@ static struct wmi_vdev_param_map wmi_10x_vdev_param_map = {
+ 	.meru_vc = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.rx_decap_type = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.bw_nss_ratemask = WMI_VDEV_PARAM_UNSUPPORTED,
+-	.set_tsf = WMI_VDEV_PARAM_UNSUPPORTED,
+ };
+ 
+ static struct wmi_vdev_param_map wmi_10_2_4_vdev_param_map = {
+@@ -953,7 +951,6 @@ static struct wmi_vdev_param_map wmi_10_2_4_vdev_param_map = {
+ 	.meru_vc = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.rx_decap_type = WMI_VDEV_PARAM_UNSUPPORTED,
+ 	.bw_nss_ratemask = WMI_VDEV_PARAM_UNSUPPORTED,
+-	.set_tsf = WMI_10X_VDEV_PARAM_TSF_INCREMENT,
+ };
+ 
+ static struct wmi_vdev_param_map wmi_10_4_vdev_param_map = {
+@@ -1029,7 +1026,6 @@ static struct wmi_vdev_param_map wmi_10_4_vdev_param_map = {
+ 	.meru_vc = WMI_10_4_VDEV_PARAM_MERU_VC,
+ 	.rx_decap_type = WMI_10_4_VDEV_PARAM_RX_DECAP_TYPE,
+ 	.bw_nss_ratemask = WMI_10_4_VDEV_PARAM_BW_NSS_RATEMASK,
+-	.set_tsf = WMI_10_4_VDEV_PARAM_TSF_INCREMENT,
+ 	.inc_tsf = WMI_10_4_VDEV_PARAM_TSF_INCREMENT,
+ 	.dec_tsf = WMI_10_4_VDEV_PARAM_TSF_DECREMENT,
+ };
+diff --git a/drivers/net/wireless/ath/ath10k/wmi.h b/drivers/net/wireless/ath/ath10k/wmi.h
+index 410578a..99a455c 100644
+--- a/drivers/net/wireless/ath/ath10k/wmi.h
++++ b/drivers/net/wireless/ath/ath10k/wmi.h
+@@ -4727,7 +4727,6 @@ struct wmi_vdev_param_map {
+ 	u32 meru_vc;
+ 	u32 rx_decap_type;
+ 	u32 bw_nss_ratemask;
+-	u32 set_tsf;
+ 	u32 inc_tsf;
+ 	u32 dec_tsf;
+ };
+-- 
+2.1.4
+

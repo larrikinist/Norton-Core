@@ -1,0 +1,148 @@
+--- a/drivers/net/wireless/ath/wil6210/cfg80211.c
++++ b/drivers/net/wireless/ath/wil6210/cfg80211.c
+@@ -757,6 +757,26 @@ static int wil_cfg80211_disconnect(struct wiphy *wiphy,
+ 	return rc;
+ }
+ 
++static int wil_cfg80211_set_wiphy_params(struct wiphy *wiphy, u32 changed)
++{
++	struct wil6210_priv *wil = wiphy_to_wil(wiphy);
++	int rc;
++
++	/* these parameters are explicitly not supported */
++	if (changed & (WIPHY_PARAM_RETRY_LONG |
++		       WIPHY_PARAM_FRAG_THRESHOLD |
++		       WIPHY_PARAM_RTS_THRESHOLD))
++		return -ENOTSUPP;
++
++	if (changed & WIPHY_PARAM_RETRY_SHORT) {
++		rc = wmi_set_mgmt_retry(wil, wiphy->retry_short);
++		if (rc)
++			return rc;
++	}
++
++	return 0;
++}
++
+ int wil_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
+ 			 struct cfg80211_mgmt_tx_params *params,
+ 			 u64 *cookie)
+@@ -1514,6 +1534,7 @@ static struct cfg80211_ops wil_cfg80211_ops = {
+ 	.scan = wil_cfg80211_scan,
+ 	.connect = wil_cfg80211_connect,
+ 	.disconnect = wil_cfg80211_disconnect,
++	.set_wiphy_params = wil_cfg80211_set_wiphy_params,
+ 	.change_virtual_intf = wil_cfg80211_change_iface,
+ 	.get_station = wil_cfg80211_get_station,
+ 	.dump_station = wil_cfg80211_dump_station,
+--- a/drivers/net/wireless/ath/wil6210/main.c
++++ b/drivers/net/wireless/ath/wil6210/main.c
+@@ -703,6 +703,19 @@ static int wil_target_reset(struct wil6210_priv *wil)
+ 	return 0;
+ }
+ 
++static void wil_collect_fw_info(struct wil6210_priv *wil)
++{
++	struct wiphy *wiphy = wil_to_wiphy(wil);
++	u8 retry_short;
++	int rc;
++
++	rc = wmi_get_mgmt_retry(wil, &retry_short);
++	if (!rc) {
++		wiphy->retry_short = retry_short;
++		wil_dbg_misc(wil, "FW retry_short: %d\n", retry_short);
++	}
++}
++
+ void wil_mbox_ring_le2cpus(struct wil6210_mbox_ring *r)
+ {
+ 	le32_to_cpus(&r->base);
+@@ -954,6 +967,8 @@ int wil_reset(struct wil6210_priv *wil, bool load_fw)
+ 			return rc;
+ 		}
+ 
++		wil_collect_fw_info(wil);
++
+ 		if (wil->platform_ops.notify) {
+ 			rc = wil->platform_ops.notify(wil->platform_handle,
+ 						      WIL_PLATFORM_EVT_FW_RDY);
+--- a/drivers/net/wireless/ath/wil6210/wil6210.h
++++ b/drivers/net/wireless/ath/wil6210/wil6210.h
+@@ -825,6 +825,8 @@ int wmi_delba_tx(struct wil6210_priv *wil, u8 ringid, u16 reason);
+ int wmi_delba_rx(struct wil6210_priv *wil, u8 cidxtid, u16 reason);
+ int wmi_addba_rx_resp(struct wil6210_priv *wil, u8 cid, u8 tid, u8 token,
+ 		      u16 status, bool amsdu, u16 agg_wsize, u16 timeout);
++int wmi_set_mgmt_retry(struct wil6210_priv *wil, u8 retry_short);
++int wmi_get_mgmt_retry(struct wil6210_priv *wil, u8 *retry_short);
+ int wil_addba_rx_request(struct wil6210_priv *wil, u8 cidxtid,
+ 			 u8 dialog_token, __le16 ba_param_set,
+ 			 __le16 ba_timeout, __le16 ba_seq_ctrl);
+--- a/drivers/net/wireless/ath/wil6210/wmi.c
++++ b/drivers/net/wireless/ath/wil6210/wmi.c
+@@ -1584,6 +1584,65 @@ int wmi_addba_rx_resp(struct wil6210_priv *wil, u8 cid, u8 tid, u8 token,
+ 	return rc;
+ }
+ 
++int wmi_set_mgmt_retry(struct wil6210_priv *wil, u8 retry_short)
++{
++	int rc;
++	struct wmi_set_mgmt_retry_limit_cmd cmd = {
++		.mgmt_retry_limit = retry_short,
++	};
++	struct {
++		struct wmi_cmd_hdr wmi;
++		struct wmi_set_mgmt_retry_limit_event evt;
++	} __packed reply;
++
++	wil_dbg_wmi(wil, "Setting mgmt retry short %d\n", retry_short);
++
++	if (!test_bit(WMI_FW_CAPABILITY_MGMT_RETRY_LIMIT, wil->fw_capabilities))
++		return -ENOTSUPP;
++
++	reply.evt.status = WMI_FW_STATUS_FAILURE;
++
++	rc = wmi_call(wil, WMI_SET_MGMT_RETRY_LIMIT_CMDID, &cmd, sizeof(cmd),
++		      WMI_SET_MGMT_RETRY_LIMIT_EVENTID, &reply, sizeof(reply),
++		      100);
++	if (rc)
++		return rc;
++
++	if (reply.evt.status != WMI_FW_STATUS_SUCCESS) {
++		wil_err(wil, "set mgmt retry limit failed with status %d\n",
++			reply.evt.status);
++		rc = -EINVAL;
++	}
++
++	return rc;
++}
++
++int wmi_get_mgmt_retry(struct wil6210_priv *wil, u8 *retry_short)
++{
++	int rc;
++	struct {
++		struct wmi_cmd_hdr wmi;
++		struct wmi_get_mgmt_retry_limit_event evt;
++	} __packed reply;
++
++	wil_dbg_wmi(wil, "getting mgmt retry short\n");
++
++	if (!test_bit(WMI_FW_CAPABILITY_MGMT_RETRY_LIMIT, wil->fw_capabilities))
++		return -ENOTSUPP;
++
++	reply.evt.mgmt_retry_limit = 0;
++	rc = wmi_call(wil, WMI_GET_MGMT_RETRY_LIMIT_CMDID, NULL, 0,
++		      WMI_GET_MGMT_RETRY_LIMIT_EVENTID, &reply, sizeof(reply),
++		      100);
++	if (rc)
++		return rc;
++
++	if (retry_short)
++		*retry_short = reply.evt.mgmt_retry_limit;
++
++	return 0;
++}
++
+ void wmi_event_flush(struct wil6210_priv *wil)
+ {
+ 	struct pending_wmi_event *evt, *t;
+

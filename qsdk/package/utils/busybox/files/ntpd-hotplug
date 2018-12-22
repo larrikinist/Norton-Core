@@ -1,0 +1,9 @@
+#!/bin/sh
+# We want pass all to hotplug
+# It is 11 minutes and changes
+ACTION="$1" DRIFT="$freq_drift_ppm" \
+        STRATUM="$stratum" \
+        OFFSET="$offset" \
+        POLL="$poll_interval" \
+        /sbin/hotplug-call ntp
+

@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# Added for manufacture test
+if [ -f "/tmp/test_reset_button" ] ; then
+        #echo "[$ACTION] [$SEEN] [$BUTTON]" > /dev/console
+        if [ "$ACTION" = "released" ] ; then
+		if [ "$SEEN" -lt 1 ] ; then
+			SEEN=1
+		fi
+                echo "$BUTTON button is $ACTION within $SEEN seconds" > /dev/console
+        else
+                echo "$BUTTON button is $ACTION" > /dev/console
+        fi
+        exit
+fi
+
+[ "${ACTION}" = "released" ] || exit 0
+
+. /lib/functions.sh
+
+logger "$BUTTON pressed for $SEEN seconds"
+
+if [ "$SEEN" -lt 3 ]
+then
+	echo "REBOOT" > /dev/console
+	sync
+	reboot
+elif [ "$SEEN" -gt 9 ]
+then
+	echo "FACTORY RESET" > /dev/console
+	dm_crypt_config clear	
+	factory_reset.sh
+	reboot -f
+fi
+
+return 0

@@ -1,0 +1,22 @@
+--- a/block.c	2016-10-28 16:43:14.053626718 -0700
++++ b/block.c	2016-10-28 16:43:17.045626667 -0700
+@@ -746,6 +746,10 @@
+ 		char target[] = "/mnt/mmcblk123";
+ 		int err = 0;
+ 
++		// Not allow emmc to be mounted
++		if (!strncmp("mmc", device, 3))
++			return err;
++	
+ 		snprintf(target, sizeof(target), "/mnt/%s", device);
+ 		mkdir_p(target);
+ 
+@@ -1235,7 +1239,7 @@
+ 	cache_load(0);
+ 	printf("config 'global'\n");
+ 	printf("\toption\tanon_swap\t'0'\n");
+-	printf("\toption\tanon_mount\t'0'\n");
++	printf("\toption\tanon_mount\t'1'\n");
+ 	printf("\toption\tauto_swap\t'1'\n");
+ 	printf("\toption\tauto_mount\t'1'\n");
+ 	printf("\toption\tdelay_root\t'5'\n");

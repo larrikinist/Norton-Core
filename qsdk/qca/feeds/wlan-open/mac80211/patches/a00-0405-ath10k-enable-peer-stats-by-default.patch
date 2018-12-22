@@ -1,0 +1,39 @@
+From a75757ac332ed800dcb1022d297e9e832c4f362b Mon Sep 17 00:00:00 2001
+From: Thomas Pedersen <twp@codeaurora.org>
+Date: Wed, 24 Aug 2016 16:51:53 -0700
+Subject: [PATCH] ath10k: enable peer stats by default
+
+IFTYPE_MESH_POINT need to rely on these for accurate path
+selection metrics. Other modes will probably also find
+them useful. Enabling peer stats has the side effect of
+reducing max number of STAs from 128 to 118. There should
+be negligible performance impact.
+
+If users really need 128 STAs and don't mind losing out on
+peer stats, they can still disable them:
+
+echo 0 > debugfs/ieee80211/phyn/ath10k/peer_stats
+
+Signed-off-by: Thomas Pedersen <twp@codeaurora.org>
+---
+ drivers/net/wireless/ath/ath10k/core.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/net/wireless/ath/ath10k/core.c b/drivers/net/wireless/ath/ath10k/core.c
+index 318db83..e425d41 100644
+--- a/drivers/net/wireless/ath/ath10k/core.c
++++ b/drivers/net/wireless/ath/ath10k/core.c
+@@ -2248,6 +2248,9 @@ static void ath10k_core_register_work(struct work_struct *work)
+ 	struct ath10k *ar = container_of(work, struct ath10k, register_work);
+ 	int status;
+ 
++	/* peer stats are enabled by default */
++	set_bit(ATH10K_FLAG_PEER_STATS, &ar->dev_flags);
++
+ 	status = ath10k_core_probe_fw(ar);
+ 	if (status) {
+ 		ath10k_err(ar, "could not probe fw (%d)\n", status);
+-- 
+The Qualcomm Innovation Center, Inc. is a member of the Code Aurora Forum,
+a Linux Foundation Collaborative Project
+

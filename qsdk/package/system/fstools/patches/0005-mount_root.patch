@@ -1,0 +1,49 @@
+--- a/mount_root.c	2016-08-17 12:00:51.607224682 -0700
++++ b/mount_root.c	2016-08-17 12:05:30.903219372 -0700
+@@ -14,8 +14,7 @@
+ #include <sys/mount.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+-
+-#include <libubox/ulog.h>
++#include <sys/stat.h>
+ 
+ #include "libfstools/libfstools.h"
+ #include "libfstools/volume.h"
+@@ -33,6 +32,36 @@
+ 	if (!getenv("PREINIT"))
+ 		return -1;
+ 
++        // if /dev/mapper/overlay exists, use it as rootfs_data
++        char * blk = "/dev/mapper/overlay";
++        struct stat buf;
++        if ( ! stat(blk, &buf) ) {
++ 		if (mkdir("/tmp/overlay", 0755)) {
++	                fprintf(stderr, "failed to mkdir /tmp/overlay: %s\n", strerror(errno));
++        	        return -1;
++        	}
++
++		if (mount(blk, "/tmp/overlay", "ext4", MS_NOATIME, NULL)) {
++                	fprintf(stderr, "failed to mount -t %s %s /tmp/overlay: %s\n",
++                                "ext4",  blk, strerror(errno));
++                	return -1;
++        	}
++
++		extroot_prefix = "/tmp/overlay";
++        	if (!mount_extroot()) {
++                	fprintf(stderr, "switched to extroot\n");
++                	return 0;
++        	}	
++		
++        	fprintf(stderr, "switching to overlay\n");
++        	if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
++                	fprintf(stderr, "switching to jffs2 failed - fallback to ramoverlay\n");
++                	return ramoverlay();
++        	}	
++
++		return -1;
++        }
++
+ 	if (!data) {
+ 		root = volume_find("rootfs");
+ 		volume_init(root);

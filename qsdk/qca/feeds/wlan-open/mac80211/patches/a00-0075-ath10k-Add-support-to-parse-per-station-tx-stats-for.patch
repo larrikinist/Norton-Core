@@ -1,0 +1,888 @@
+--- a/drivers/net/wireless/ath/ath10k/core.h
++++ b/drivers/net/wireless/ath/ath10k/core.h
+@@ -319,6 +319,78 @@ struct ath10k_txq {
+ 	unsigned long num_push_allowed;
+ };
+ 
++struct ath10k_tx_stats {
++	u64 succ_bytes_vht[VHT_MCS_NUM];
++	u64 succ_bytes_ht[HT_MCS_NUM];
++	u64 succ_bytes_bw[VHT_BW_NUM];
++	u64 succ_bytes_nss[VHT_NSS_NUM];
++	u64 succ_bytes_legacy_rates[LEGACY_RATE_NUM];
++	u64 succ_bytes_gi[VHT_GI_NUM];
++	u64 succ_bytes_rate_num[VHT_RATE_NUM];
++
++	u64 succ_pkts_vht[VHT_MCS_NUM];
++	u64 succ_pkts_ht[HT_MCS_NUM];
++	u64 succ_pkts_bw[VHT_BW_NUM];
++	u64 succ_pkts_nss[VHT_NSS_NUM];
++	u64 succ_pkts_legacy_rates[LEGACY_RATE_NUM];
++	u64 succ_pkts_gi[VHT_GI_NUM];
++	u64 succ_pkts_rate_num[VHT_RATE_NUM];
++
++	u64 fail_bytes_vht[VHT_MCS_NUM];
++	u64 fail_bytes_ht[HT_MCS_NUM];
++	u64 fail_bytes_bw[VHT_BW_NUM];
++	u64 fail_bytes_nss[VHT_NSS_NUM];
++	u64 fail_bytes_legacy_rates[LEGACY_RATE_NUM];
++	u64 fail_bytes_gi[VHT_GI_NUM];
++	u64 fail_bytes_rate_num[VHT_RATE_NUM];
++
++	u64 fail_pkts_vht[VHT_MCS_NUM];
++	u64 fail_pkts_ht[HT_MCS_NUM];
++	u64 fail_pkts_bw[VHT_BW_NUM];
++	u64 fail_pkts_nss[VHT_NSS_NUM];
++	u64 fail_pkts_legacy_rates[LEGACY_RATE_NUM];
++	u64 fail_pkts_gi[VHT_GI_NUM];
++	u64 fail_pkts_rate_num[VHT_RATE_NUM];
++
++	u64 ampdu_bytes_vht[VHT_MCS_NUM];
++	u64 ampdu_bytes_ht[HT_MCS_NUM];
++	u64 ampdu_bytes_bw[VHT_BW_NUM];
++	u64 ampdu_bytes_nss[VHT_NSS_NUM];
++	u64 ampdu_bytes_legacy_rates[LEGACY_RATE_NUM];
++	u64 ampdu_bytes_gi[VHT_GI_NUM];
++	u64 ampdu_bytes_rate_num[VHT_RATE_NUM];
++
++	u64 ampdu_pkts_vht[VHT_MCS_NUM];
++	u64 ampdu_pkts_ht[HT_MCS_NUM];
++	u64 ampdu_pkts_bw[VHT_BW_NUM];
++	u64 ampdu_pkts_nss[VHT_NSS_NUM];
++	u64 ampdu_pkts_legacy_rates[LEGACY_RATE_NUM];
++	u64 ampdu_pkts_gi[VHT_GI_NUM];
++	u64 ampdu_pkts_rate_num[VHT_RATE_NUM];
++
++	u64 retry_bytes_vht[VHT_MCS_NUM];
++	u64 retry_bytes_ht[HT_MCS_NUM];
++	u64 retry_bytes_bw[VHT_BW_NUM];
++	u64 retry_bytes_nss[VHT_NSS_NUM];
++	u64 retry_bytes_legacy_rates[LEGACY_RATE_NUM];
++	u64 retry_bytes_gi[VHT_GI_NUM];
++	u64 retry_bytes_rate_num[VHT_RATE_NUM];
++
++	u64 retry_pkts_vht[VHT_MCS_NUM];
++	u64 retry_pkts_ht[HT_MCS_NUM];
++	u64 retry_pkts_bw[VHT_BW_NUM];
++	u64 retry_pkts_nss[VHT_NSS_NUM];
++	u64 retry_pkts_legacy_rates[LEGACY_RATE_NUM];
++	u64 retry_pkts_gi[VHT_GI_NUM];
++	u64 retry_pkts_rate_num[VHT_RATE_NUM];
++
++	u64 tx_duration;
++	u64 ba_fails;
++	u64 ack_fails;
++
++	struct rate_info txrate;
++};
++
+ struct ath10k_sta {
+ 	struct ath10k_vif *arvif;
+ 
+@@ -335,6 +407,7 @@ struct ath10k_sta {
+ 	/* protected by conf_mutex */
+ 	bool aggr_mode;
+ 	u64 rx_duration;
++	struct ath10k_tx_stats tx_stats;
+ #endif
+ 	struct ath10k_smart_ant_sta *smart_ant_sta;
+ };
+@@ -680,6 +753,21 @@ struct ath10k_fw_components {
+ 	struct ath10k_fw_file fw_file;
+ };
+ 
++struct ath10k_peer_tx_stats {
++	u32	succ_bytes;
++	u32	retry_bytes;
++	u32	failed_bytes;
++	u8	ratecode;
++	u8	flags;
++	u16	peer_id;
++	u16	succ_pkts;
++	u16	retry_pkts;
++	u16	failed_pkts;
++	u16	duration;
++	u32	reserved1;
++	u32	reserved2;
++};
++
+ struct ath10k {
+ 	struct ath_common ath_common;
+ 	struct ieee80211_hw *hw;
+@@ -955,6 +1043,9 @@ struct ath10k {
+ 	struct sk_buff_head fwlog_tx_queue;
+ 
+ 	struct ath10k_smart_ant_info smart_ant_info;
++#ifdef CPTCFG_MAC80211_DEBUGFS
++	struct ath10k_peer_tx_stats peer_tx_stats;
++#endif /*CPTCFG_MAC80211_DEBUGFS*/
+ 
+ 	/* must be last */
+ 	u8 drv_priv[0] __aligned(sizeof(void *));
+--- a/drivers/net/wireless/ath/ath10k/debug.h
++++ b/drivers/net/wireless/ath/ath10k/debug.h
+@@ -49,7 +49,8 @@ enum ath10k_pktlog_filter {
+ 	ATH10K_PKTLOG_RCUPDATE   = 0x000000008,
+ 	ATH10K_PKTLOG_DBG_PRINT  = 0x000000010,
+ 	ATH10K_PKTLOG_SMART_ANT	 = 0x000000020,
+-	ATH10K_PKTLOG_ANY        = 0x00000003f,
++	ATH10K_PKTLOG_PEER_STATS = 0x000000040,
++	ATH10K_PKTLOG_ANY        = 0x00000007f,
+ };
+ 
+ enum ath10k_dbg_aggr_mode {
+@@ -217,11 +218,30 @@ ath10k_debug_get_new_fw_crash_data(struc
+ void ath10k_sta_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+ 			    struct ieee80211_sta *sta, struct dentry *dir);
+ void ath10k_sta_update_rx_duration(struct ath10k *ar, struct list_head *peer);
++int ath10k_debug_tx_peer_stats_enable(struct ath10k *ar);
++void ath10k_fetch_10_2_tx_stats(struct ath10k *ar, u8 *data);
++void ath10k_fetch_10_4_tx_stats(struct ath10k *ar, u8 *data);
++void ath10k_htt_fetch_10_4_peer_stats(struct ath10k *ar,
++				      struct sk_buff *skb);
+ #else
+ static inline void ath10k_sta_update_rx_duration(struct ath10k *ar,
+ 						 struct list_head *peer)
+ {
+ }
++static inline int ath10k_debug_tx_peer_stats_enable(struct ath10k *ar)
++{
++	return 0;
++}
++static inline void ath10k_fetch_10_2_tx_stats(struct ath10k *ar, u8 *data)
++{
++}
++static inline void ath10k_fetch_10_4_tx_stats(struct ath10k *ar, u8 *data)
++{
++}
++static inline void ath10k_htt_fetch_10_4_peer_stats(struct ath10k *ar,
++						    struct sk_buff *skb)
++{
++}
+ #endif /* CPTCFG_MAC80211_DEBUGFS */
+ void ath10k_dbg_bug_on_fw_assert(struct ath10k *ar);
+ 
+--- a/drivers/net/wireless/ath/ath10k/debugfs_sta.c
++++ b/drivers/net/wireless/ath/ath10k/debugfs_sta.c
+@@ -16,7 +16,300 @@
+ 
+ #include "core.h"
+ #include "wmi-ops.h"
++#include "wmi.h"
+ #include "debug.h"
++#include "txrx.h"
++#include "htt.h"
++#include <linux/nl80211.h>
++
++static char ath10k_map_rate_code_number(u8 rate, u8 pream)
++{
++	u8 i;
++	u8 legacy_rates[] = {TX_CCK_RATE_1_MBPS, TX_CCK_RATE_2_MBPS,
++			     TX_CCK_RATE_5_5_MBPS, TX_CCK_RATE_11_MBPS,
++			     TX_OFDM_RATE_6_MBPS, TX_OFDM_RATE_9_MBPS,
++			     TX_OFDM_RATE_12_MBPS, TX_OFDM_RATE_18_MBPS,
++			     TX_OFDM_RATE_24_MBPS, TX_OFDM_RATE_36_MBPS,
++			     TX_OFDM_RATE_48_MBPS, TX_OFDM_RATE_54_MBPS};
++
++	/* For CCK 5.5Mbps firmware sends rate as 6 */
++	if (pream == WMI_RATE_PREAMBLE_CCK && rate == 6)
++		rate = TX_CCK_RATE_5_5_MBPS;
++
++	for (i = 0; i < LEGACY_RATE_NUM; i++) {
++		if (rate == legacy_rates[i])
++			break;
++	}
++
++	return i;
++}
++
++static void ath10k_fill_tx_bitrate(struct ieee80211_hw *hw,
++				   struct ieee80211_sta *sta,
++				   struct rate_info *txrate,
++				   u8 rate, u8 sgi, u8 success, u8 failed,
++				   u8 retries, bool skip_auto_rate)
++{
++	struct ath10k_sta *arsta = (struct ath10k_sta *)sta->drv_priv;
++	struct ieee80211_chanctx_conf *conf = NULL;
++	struct ieee80211_tx_info info;
++
++	memset(&info, 0, sizeof(info));
++	info.status.rates[0].count = retries;
++
++	switch (txrate->flags) {
++	case WMI_RATE_PREAMBLE_OFDM:
++		if (arsta->arvif && arsta->arvif->vif)
++			conf = rcu_dereference(arsta->arvif->vif->chanctx_conf);
++		if (conf && conf->def.chan->band == NL80211_BAND_5GHZ)
++			info.status.rates[0].idx = txrate->mcs - 4;
++		arsta->tx_stats.txrate.legacy = rate * 10;
++		break;
++	case WMI_RATE_PREAMBLE_CCK:
++		info.status.rates[0].idx = txrate->mcs;
++		if (rate == TX_CCK_RATE_5_5_MBPS)
++			arsta->tx_stats.txrate.legacy = rate * 10 + 50;
++		else
++			arsta->tx_stats.txrate.legacy = rate * 10;
++		if (sgi)
++			info.status.rates[0].flags |=
++				(IEEE80211_TX_RC_USE_SHORT_PREAMBLE |
++				 IEEE80211_TX_RC_SHORT_GI);
++		break;
++	case WMI_RATE_PREAMBLE_HT:
++		info.status.rates[0].idx =
++				txrate->mcs + ((txrate->nss - 1) * 8);
++		arsta->tx_stats.txrate.flags = RATE_INFO_FLAGS_MCS;
++		arsta->tx_stats.txrate.mcs = txrate->mcs;
++		if (sgi) {
++			arsta->tx_stats.txrate.flags |=
++				RATE_INFO_FLAGS_SHORT_GI;
++			info.status.rates[0].flags |= IEEE80211_TX_RC_SHORT_GI;
++		}
++		info.status.rates[0].flags |= IEEE80211_TX_RC_MCS;
++		arsta->tx_stats.txrate.nss = txrate->nss;
++		arsta->tx_stats.txrate.bw = txrate->bw + RATE_INFO_BW_20;
++		break;
++	case WMI_RATE_PREAMBLE_VHT:
++		ieee80211_rate_set_vht(&info.status.rates[0], txrate->mcs,
++				       txrate->nss);
++		arsta->tx_stats.txrate.flags = RATE_INFO_FLAGS_VHT_MCS;
++		arsta->tx_stats.txrate.mcs = txrate->mcs;
++		if (sgi) {
++			arsta->tx_stats.txrate.flags |=
++					RATE_INFO_FLAGS_SHORT_GI;
++			info.status.rates[0].flags |= IEEE80211_TX_RC_SHORT_GI;
++		}
++		info.status.rates[0].flags |= IEEE80211_TX_RC_VHT_MCS;
++		arsta->tx_stats.txrate.nss = txrate->nss;
++		arsta->tx_stats.txrate.bw = txrate->bw + RATE_INFO_BW_20;
++		break;
++	}
++
++	switch (arsta->tx_stats.txrate.bw) {
++	case RATE_INFO_BW_40:
++		info.status.rates[0].flags |= IEEE80211_TX_RC_40_MHZ_WIDTH;
++		break;
++	case RATE_INFO_BW_80:
++		info.status.rates[0].flags |= IEEE80211_TX_RC_80_MHZ_WIDTH;
++		break;
++	default:
++		break;
++	}
++
++	if (success && !skip_auto_rate) {
++		info.flags = IEEE80211_TX_STAT_ACK;
++		ieee80211_tx_status_noskb(hw, sta, &info);
++	}
++}
++
++static void ath10k_accumulate_per_peer_tx_stats(struct ath10k *ar,
++				 struct ieee80211_sta *sta,
++				 struct ath10k_peer_tx_stats *peer_stats)
++{
++	struct ath10k_sta *arsta = (struct ath10k_sta *)sta->drv_priv;
++	u8 pream, bw, mcs, nss, rate, gi;
++	int idx, ht_idx;
++	struct ath10k_tx_stats *tx_stats = &arsta->tx_stats;
++	bool legacy_rate, skip_auto_rate;
++	struct rate_info txrate;
++
++	pream = ATH10K_HW_PREAMBLE(peer_stats->ratecode);
++	legacy_rate = ((pream == WMI_RATE_PREAMBLE_CCK) ||
++		       (pream == WMI_RATE_PREAMBLE_OFDM));
++
++	gi = ATH10K_HW_GI(peer_stats->flags);
++	skip_auto_rate = ATH10K_HW_DATA_PKT(peer_stats->flags);
++
++	if (legacy_rate) {
++		rate = ATH10K_HW_LEGACY_RATE(peer_stats->ratecode);
++		mcs = ath10k_map_rate_code_number(rate, pream);
++		if (mcs == LEGACY_RATE_NUM)
++			return;
++
++		tx_stats->succ_bytes_legacy_rates[mcs] +=
++				(peer_stats->succ_bytes);
++		tx_stats->succ_pkts_legacy_rates[mcs] +=
++				(peer_stats->succ_pkts);
++		tx_stats->fail_bytes_legacy_rates[mcs] +=
++				(peer_stats->failed_bytes);
++		tx_stats->fail_pkts_legacy_rates[mcs] +=
++				(peer_stats->failed_pkts);
++		tx_stats->retry_bytes_legacy_rates[mcs] +=
++				(peer_stats->retry_bytes);
++		tx_stats->retry_pkts_legacy_rates[mcs] +=
++				(peer_stats->retry_pkts);
++		tx_stats->ack_fails +=
++				ATH10K_HW_BA_FAIL(peer_stats->flags);
++	} else {
++		bw = ATH10K_HW_BW(peer_stats->flags);
++		nss = ATH10K_HW_NSS(peer_stats->ratecode) - 1;
++		mcs = ATH10K_HW_MCS_RATE(peer_stats->ratecode);
++		idx = mcs * 8 + 8 * 10 * (nss);
++		idx += bw * 2 + gi;
++
++		if (nss >= VHT_NSS_NUM || bw >= VHT_BW_NUM ||
++			mcs >= VHT_MCS_NUM)
++			return;
++
++		if (pream == WMI_RATE_PREAMBLE_HT)
++			ht_idx = mcs + nss * 8;
++
++		if (ATH10K_HW_AMPDU(peer_stats->flags)) {
++			tx_stats->ba_fails +=
++				ATH10K_HW_BA_FAIL(peer_stats->flags);
++			if (pream == WMI_RATE_PREAMBLE_HT) {
++				tx_stats->ampdu_bytes_ht[ht_idx] +=
++					(peer_stats->succ_bytes) +
++					(peer_stats->retry_bytes);
++				tx_stats->ampdu_pkts_ht[ht_idx] +=
++					(peer_stats->succ_pkts +
++					 peer_stats->retry_pkts);
++
++			} else {
++				tx_stats->ampdu_bytes_vht[mcs] +=
++					(peer_stats->succ_bytes) +
++					(peer_stats->retry_bytes);
++				tx_stats->ampdu_pkts_vht[mcs] +=
++					(peer_stats->succ_pkts +
++					 peer_stats->retry_pkts);
++			}
++			tx_stats->ampdu_bytes_bw[bw] +=
++				(peer_stats->succ_bytes) +
++				(peer_stats->retry_bytes);
++			tx_stats->ampdu_bytes_nss[nss] +=
++				(peer_stats->succ_bytes) +
++				(peer_stats->retry_bytes);
++			tx_stats->ampdu_bytes_gi[gi] +=
++				(peer_stats->succ_bytes) +
++				(peer_stats->retry_bytes);
++			tx_stats->ampdu_bytes_rate_num[idx] +=
++				(peer_stats->succ_bytes) +
++				(peer_stats->retry_bytes);
++			tx_stats->ampdu_pkts_bw[bw] +=
++					(peer_stats->succ_pkts +
++					 peer_stats->retry_pkts);
++			tx_stats->ampdu_pkts_nss[nss] +=
++					(peer_stats->succ_pkts +
++					 peer_stats->retry_pkts);
++			tx_stats->ampdu_pkts_gi[gi] +=
++					(peer_stats->succ_pkts +
++					 peer_stats->retry_pkts);
++			tx_stats->ampdu_pkts_rate_num[idx] +=
++					(peer_stats->succ_pkts +
++					 peer_stats->retry_pkts);
++		} else {
++			tx_stats->ack_fails +=
++				ATH10K_HW_BA_FAIL(peer_stats->flags);
++		}
++		if (pream == WMI_RATE_PREAMBLE_HT) {
++			tx_stats->succ_bytes_ht[ht_idx] +=
++				(peer_stats->succ_bytes);
++			tx_stats->succ_pkts_ht[ht_idx] +=
++				(peer_stats->succ_pkts);
++			tx_stats->fail_bytes_ht[ht_idx] +=
++				(peer_stats->failed_bytes);
++			tx_stats->fail_pkts_ht[ht_idx] +=
++				(peer_stats->failed_pkts);
++			tx_stats->retry_bytes_ht[ht_idx] +=
++				(peer_stats->retry_bytes);
++			tx_stats->retry_pkts_ht[ht_idx] +=
++				(peer_stats->retry_pkts);
++		} else {
++			tx_stats->succ_bytes_vht[mcs] +=
++				(peer_stats->succ_bytes);
++			tx_stats->succ_pkts_vht[mcs] +=
++				(peer_stats->succ_pkts);
++			tx_stats->fail_bytes_vht[mcs] +=
++				(peer_stats->failed_bytes);
++			tx_stats->fail_pkts_vht[mcs] +=
++				(peer_stats->failed_pkts);
++			tx_stats->retry_bytes_vht[mcs] +=
++				(peer_stats->retry_bytes);
++			tx_stats->retry_pkts_vht[mcs] +=
++				(peer_stats->retry_pkts);
++		}
++		tx_stats->succ_bytes_bw[bw] +=
++			(peer_stats->succ_bytes);
++		tx_stats->succ_bytes_nss[nss] +=
++			(peer_stats->succ_bytes);
++		tx_stats->succ_bytes_gi[gi] +=
++			(peer_stats->succ_bytes);
++		tx_stats->succ_bytes_rate_num[idx] +=
++			(peer_stats->succ_bytes);
++		tx_stats->succ_pkts_bw[bw] +=
++			(peer_stats->succ_pkts);
++		tx_stats->succ_pkts_nss[nss] +=
++			(peer_stats->succ_pkts);
++		tx_stats->succ_pkts_gi[gi] +=
++			(peer_stats->succ_pkts);
++		tx_stats->succ_pkts_rate_num[idx] +=
++			(peer_stats->succ_pkts);
++		tx_stats->fail_bytes_bw[bw] +=
++			(peer_stats->failed_bytes);
++		tx_stats->fail_bytes_nss[nss] +=
++			(peer_stats->failed_bytes);
++		tx_stats->fail_bytes_gi[gi] +=
++			(peer_stats->failed_bytes);
++		tx_stats->fail_bytes_rate_num[idx] +=
++			(peer_stats->failed_bytes);
++		tx_stats->fail_pkts_bw[bw] +=
++			(peer_stats->failed_pkts);
++		tx_stats->fail_pkts_nss[nss] +=
++			(peer_stats->failed_pkts);
++		tx_stats->fail_pkts_gi[gi] +=
++			(peer_stats->failed_pkts);
++		tx_stats->fail_pkts_rate_num[idx] +=
++			(peer_stats->failed_pkts);
++		tx_stats->retry_bytes_bw[bw] +=
++			(peer_stats->retry_bytes);
++		tx_stats->retry_bytes_nss[nss] +=
++			(peer_stats->retry_bytes);
++		tx_stats->retry_bytes_gi[gi] +=
++			(peer_stats->retry_bytes);
++		tx_stats->retry_bytes_rate_num[idx] +=
++			(peer_stats->retry_bytes);
++		tx_stats->retry_pkts_bw[bw] +=
++			(peer_stats->retry_pkts);
++		tx_stats->retry_pkts_nss[nss] +=
++			(peer_stats->retry_pkts);
++		tx_stats->retry_pkts_gi[gi] +=
++			(peer_stats->retry_pkts);
++		tx_stats->retry_pkts_rate_num[idx] +=
++			(peer_stats->retry_pkts);
++	}
++	txrate.flags = pream;
++	txrate.mcs = mcs;
++	txrate.nss = nss + 1;
++	txrate.bw = bw;
++	ath10k_fill_tx_bitrate(ar->hw, sta, &txrate, rate, gi,
++			       peer_stats->succ_pkts,
++			       peer_stats->failed_pkts,
++			       peer_stats->retry_pkts,
++			       skip_auto_rate);
++
++
++}
+ 
+ void ath10k_sta_update_rx_duration(struct ath10k *ar, struct list_head *head)
+ {	struct ieee80211_sta *sta;
+@@ -271,6 +564,205 @@ static const struct file_operations fops
+ 	.llseek = default_llseek,
+ };
+ 
++static void ath10k_update_per_peer_stats(struct ath10k_peer_tx_stats *tx_stats,
++					 struct ath10k_per_peer_tx_stats *p_tx_stats,
++					 struct htt_per_peer_tx_stats_ind *h_tx_stats,
++					 u8 ppdu)
++{
++	if (p_tx_stats) {
++		tx_stats->succ_bytes = __le16_to_cpu(p_tx_stats->success_bytes[ppdu]);
++		tx_stats->retry_bytes = __le16_to_cpu(p_tx_stats->retry_bytes[ppdu]);
++		tx_stats->failed_bytes = __le16_to_cpu(p_tx_stats->failed_bytes[ppdu]);
++		tx_stats->ratecode = p_tx_stats->ratecode[ppdu];
++		tx_stats->flags = p_tx_stats->flags[ppdu];
++		tx_stats->succ_pkts = p_tx_stats->success_pkts[ppdu];
++		tx_stats->retry_pkts = p_tx_stats->retry_pkts[ppdu];
++		tx_stats->failed_pkts = p_tx_stats->failed_pkts[ppdu];
++	} else {
++		tx_stats->succ_bytes = __le32_to_cpu(h_tx_stats->succ_bytes);
++		tx_stats->retry_bytes = __le32_to_cpu(h_tx_stats->retry_bytes);
++		tx_stats->failed_bytes = __le32_to_cpu(h_tx_stats->failed_bytes);
++		tx_stats->ratecode = h_tx_stats->ratecode;
++		tx_stats->flags = h_tx_stats->flags;
++		tx_stats->succ_pkts = __le16_to_cpu(h_tx_stats->succ_pkts);
++		tx_stats->retry_pkts = __le16_to_cpu(h_tx_stats->retry_pkts);
++		tx_stats->failed_pkts = __le16_to_cpu(h_tx_stats->failed_pkts);
++	}
++}
++
++void ath10k_htt_fetch_10_4_peer_stats(struct ath10k *ar, struct sk_buff *skb)
++{
++	struct htt_resp *resp = (struct htt_resp *)skb->data;
++	struct ath10k_peer_tx_stats *p_tx_stats = &ar->peer_tx_stats;
++	struct htt_per_peer_tx_stats_ind *tx_stats;
++	struct ieee80211_sta *sta = NULL;
++	struct ath10k_sta *arsta;
++	struct ath10k_peer *peer;
++	u32 peer_id = 0, i;
++	u8 ppdu_len, num_ppdu;
++
++	num_ppdu = resp->peer_tx_stats.num_ppdu;
++	ppdu_len = resp->peer_tx_stats.ppdu_len * sizeof(__le32);
++
++	if (skb->len < sizeof(struct htt_resp_hdr) + num_ppdu * ppdu_len) {
++		ath10k_warn(ar, "invalid peer stats event: len %d\n", skb->len);
++		return;
++	}
++
++	tx_stats = (struct htt_per_peer_tx_stats_ind *)
++			(resp->peer_tx_stats.payload);
++	peer_id = tx_stats->peer_id;
++
++	rcu_read_lock();
++	spin_lock_bh(&ar->data_lock);
++	peer = ath10k_peer_find_by_id(ar, peer_id);
++	if (!peer)
++		goto err;
++
++	sta = peer->sta;
++	if (!sta)
++		goto err;
++
++	for (i = 0; i < num_ppdu; i++) {
++		tx_stats =(struct htt_per_peer_tx_stats_ind *)
++			  (resp->peer_tx_stats.payload + i * ppdu_len);
++
++		arsta = (struct ath10k_sta *)sta->drv_priv;
++		ath10k_update_per_peer_stats(p_tx_stats, NULL, tx_stats, i);
++		ath10k_accumulate_per_peer_tx_stats(ar, sta, p_tx_stats);
++		arsta->tx_stats.tx_duration += __le16_to_cpu(tx_stats->tx_duration);
++	}
++	spin_unlock_bh(&ar->data_lock);
++	rcu_read_unlock();
++
++	return;
++err:
++	spin_unlock_bh(&ar->data_lock);
++	rcu_read_unlock();
++	ath10k_warn(ar, "invalid per peer stats received\n");
++}
++
++void ath10k_fetch_10_4_tx_stats(struct ath10k *ar, u8 *data)
++{
++	struct ath10k_pktlog_10_4_hdr *hdr = (struct ath10k_pktlog_10_4_hdr *)data;
++	struct ath10k_peer_tx_stats *p_tx_stats = &ar->peer_tx_stats;
++	struct ath10k_per_peer_tx_stats *tx_stats;
++	struct ieee80211_sta *sta;
++	struct ath10k_sta *arsta;
++	struct ath10k_peer *peer;
++	int len = __le16_to_cpu(hdr->size);
++	u16 log_type = __le16_to_cpu(hdr->log_type);
++	u32 peer_id = 0, i;
++
++	if (len != ATH10K_10_4_TX_STATS_OFFSET + sizeof(*tx_stats))
++		return;
++
++	if (log_type == ATH_PKTLOG_TYPE_TX_STAT) {
++		tx_stats = (struct ath10k_per_peer_tx_stats *)
++			   ((hdr->payload) +
++			    ATH10K_10_4_TX_STATS_OFFSET);
++
++		if (!tx_stats->tx_ppdu_cnt)
++			return;
++
++		peer_id = tx_stats->peer_id;
++
++		rcu_read_lock();
++		spin_lock_bh(&ar->data_lock);
++		peer = ath10k_peer_find_by_id(ar, peer_id);
++		if (!peer)
++			goto err;
++
++		sta = peer->sta;
++		if (!sta)
++			goto err;
++
++		arsta = (struct ath10k_sta *)sta->drv_priv;
++		for (i = 0; i < tx_stats->tx_ppdu_cnt; i++) {
++			ath10k_update_per_peer_stats(p_tx_stats, tx_stats, NULL, i);
++			ath10k_accumulate_per_peer_tx_stats(ar, sta, p_tx_stats);
++		}
++		arsta->tx_stats.tx_duration += __le32_to_cpu(tx_stats->tx_duration);
++		spin_unlock_bh(&ar->data_lock);
++		rcu_read_unlock();
++
++		return;
++	}
++
++err:
++	spin_unlock_bh(&ar->data_lock);
++	rcu_read_unlock();
++	ath10k_warn(ar, "invalid per peer stats received\n");
++}
++
++void ath10k_fetch_10_2_tx_stats(struct ath10k *ar, u8 *data)
++{
++	struct ath10k_pktlog_hdr *hdr = (struct ath10k_pktlog_hdr *)data;
++	struct ath10k_peer_tx_stats *p_tx_stats = &ar->peer_tx_stats;
++	struct ath10k_per_peer_tx_stats *tx_stats;
++	struct ieee80211_sta *sta;
++	struct ath10k_sta *arsta;
++	struct ath10k_peer *peer;
++	int len = __le16_to_cpu(hdr->size);
++	u16 log_type = __le16_to_cpu(hdr->log_type);
++	u16 log_flags = __le16_to_cpu(hdr->flags);
++	u32 peer_id = 0, i;
++
++	if ((log_flags & PKTLOG_INFO_FLAG_HW_STATUS_V2) &&
++	    (len != (ATH10K_10_2_TX_STATS_OFFSET_V2 + sizeof(*tx_stats))))
++		return;
++
++	if (log_type != ATH_PKTLOG_TYPE_TX_CTRL &&
++	    log_type != ATH_PKTLOG_TYPE_TX_STAT)
++		return;
++
++	if (log_type == ATH_PKTLOG_TYPE_TX_STAT) {
++ 		if (log_flags & PKTLOG_INFO_FLAG_HW_STATUS_V2)
++			tx_stats = (struct ath10k_per_peer_tx_stats *)
++				   ((hdr->payload) +
++				    ATH10K_10_2_TX_STATS_OFFSET_V2);
++		else
++			tx_stats = (struct ath10k_per_peer_tx_stats *)
++				   ((hdr->payload) +
++				    ATH10K_10_2_TX_STATS_OFFSET);
++
++		if (!tx_stats->tx_ppdu_cnt)
++			return;
++
++		peer_id = tx_stats->peer_id;
++	} else {
++		u32 *tx_ctrl_desc;
++		tx_ctrl_desc = (u32 *)hdr->payload;
++
++		peer_id = __le32_to_cpu(tx_ctrl_desc[ATH10K_TXC_PEERID]);
++	}
++
++	rcu_read_lock();
++	spin_lock_bh(&ar->data_lock);
++	peer = ath10k_peer_find_by_id(ar, peer_id);
++	if (!peer)
++		goto err;
++
++	sta = peer->sta;
++	if (!sta)
++		goto err;
++
++	arsta = (struct ath10k_sta *)sta->drv_priv;
++	for (i = 0; i < tx_stats->tx_ppdu_cnt; i++) {
++		ath10k_update_per_peer_stats(p_tx_stats, tx_stats, NULL, i);
++		ath10k_accumulate_per_peer_tx_stats(ar, sta, p_tx_stats);
++	}
++	arsta->tx_stats.tx_duration += __le32_to_cpu(tx_stats->tx_duration);
++	spin_unlock_bh(&ar->data_lock);
++	rcu_read_unlock();
++
++	return;
++
++err:
++	spin_unlock_bh(&ar->data_lock);
++	rcu_read_unlock();
++}
++
+ void ath10k_sta_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+ 			    struct ieee80211_sta *sta, struct dentry *dir)
+ {
+--- a/drivers/net/wireless/ath/ath10k/htt_rx.c
++++ b/drivers/net/wireless/ath/ath10k/htt_rx.c
+@@ -2323,6 +2323,8 @@ bool ath10k_htt_t2h_msg_handler(struct a
+ 					__le16_to_cpu(hdr->size));
+ 		ath10k_smart_ant_proc_tx_feedback(ar, resp->pktlog_msg.payload);
+ 		ath10k_process_pktlog(ar, resp->pktlog_msg.payload);
++		if (ath10k_peer_stats_enabled(ar))
++			ath10k_fetch_10_2_tx_stats(ar, resp->pktlog_msg.payload);
+ 		break;
+ 	}
+ 	case HTT_T2H_MSG_TYPE_RX_FLUSH: {
+@@ -2368,6 +2370,10 @@ bool ath10k_htt_t2h_msg_handler(struct a
+ 	case HTT_T2H_MSG_TYPE_TX_MODE_SWITCH_IND:
+ 		ath10k_htt_rx_tx_mode_switch_ind(ar, skb);
+ 		break;
++	case HTT_T2H_MSG_TYPE_PEER_STATS:
++		if (ath10k_peer_stats_enabled(ar))
++			ath10k_htt_fetch_10_4_peer_stats(ar, skb);
++		break;
+ 	case HTT_T2H_MSG_TYPE_EN_STATS:
+ 	default:
+ 		ath10k_warn(ar, "htt event (%d) not handled\n",
+@@ -2385,6 +2391,8 @@ void ath10k_htt_rx_pktlog_completion_han
+ {
+ 	trace_ath10k_htt_pktlog(ar, skb->data, skb->len);
+ 	ath10k_process_pktlog(ar, skb->data);
++	if (ath10k_peer_stats_enabled(ar))
++		ath10k_fetch_10_4_tx_stats(ar, skb->data);
+ 	dev_kfree_skb_any(skb);
+ }
+ EXPORT_SYMBOL(ath10k_htt_rx_pktlog_completion_handler);
+--- a/drivers/net/wireless/ath/ath10k/wmi.h
++++ b/drivers/net/wireless/ath/ath10k/wmi.h
+@@ -4591,12 +4591,46 @@ enum wmi_rate_preamble {
+ 
+ #define ATH10K_HW_NSS(rate)		(1 + (((rate) >> 4) & 0x3))
+ #define ATH10K_HW_PREAMBLE(rate)	(((rate) >> 6) & 0x3)
++#define ATH10K_HW_MCS_RATE(rate)	((rate) & 0xf)
++#define ATH10K_HW_LEGACY_RATE(rate)	((rate) & 0x3f)
+ #define ATH10K_HW_RATECODE(rate, nss, preamble)	\
+ 	(((preamble) << 6) | ((nss) << 4) | (rate))
+ 
++#define ATH10K_HW_AMPDU(flags)		(flags & 0x1)
++#define ATH10K_HW_BA_FAIL(flags)	(((flags) >> 1) & 0x3)
++#define ATH10K_HW_BW(flags)		(((flags) >> 3) & 0x3)
++#define ATH10K_HW_GI(flags)		(((flags) >> 5) & 0x1)
++#define ATH10K_HW_DATA_PKT(flags)	(((flags) >> 6) & 0x1)
++
+ /* Value to disable fixed rate setting */
+ #define WMI_FIXED_RATE_NONE    (0xff)
+ 
++#define LEGACY_RATE_NUM	12
++#define VHT_MCS_NUM	10
++#define HT_MCS_NUM	32
++#define VHT_BW_NUM	4
++#define VHT_NSS_NUM	4
++#define VHT_GI_NUM	2
++#define VHT_RATE_NUM	320
++
++enum tx_ofdm_rates {
++	TX_OFDM_RATE_48_MBPS = 48,
++	TX_OFDM_RATE_24_MBPS = 24,
++	TX_OFDM_RATE_12_MBPS = 12,
++	TX_OFDM_RATE_54_MBPS = 54,
++	TX_OFDM_RATE_36_MBPS = 36,
++	TX_OFDM_RATE_18_MBPS = 18,
++	TX_OFDM_RATE_9_MBPS = 9,
++	TX_OFDM_RATE_6_MBPS = 6,
++};
++
++enum tx_cck_rates {
++	TX_CCK_RATE_11_MBPS = 11,
++	TX_CCK_RATE_5_5_MBPS = 5,
++	TX_CCK_RATE_2_MBPS = 2,
++	TX_CCK_RATE_1_MBPS = 1,
++};
++
+ struct wmi_vdev_param_map {
+ 	u32 rts_threshold;
+ 	u32 fragmentation_threshold;
+--- a/drivers/net/wireless/ath/ath10k/debug.c
++++ b/drivers/net/wireless/ath/ath10k/debug.c
+@@ -2513,6 +2513,16 @@ void ath10k_debug_unregister(struct ath1
+ 	ath10k_deinit_pktlog(ar);
+ }
+ 
++int ath10k_debug_tx_peer_stats_enable(struct ath10k *ar)
++{
++	if (ath10k_peer_stats_enabled(ar)) {
++		ar->debug.pktlog_filter |= ATH10K_PKTLOG_PEER_STATS;
++		/* This is used for per peer tx stats */
++		return ath10k_wmi_pdev_pktlog_enable(ar, ar->debug.pktlog_filter);
++	}
++	return 0;
++}
++
+ #endif /* CPTCFG_ATH10K_DEBUGFS */
+ 
+ #ifdef CPTCFG_ATH10K_DEBUG
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -7299,6 +7299,12 @@ ath10k_mac_op_assign_vif_chanctx(struct
+ 		arvif->is_up = true;
+ 	}
+ 
++	ret = ath10k_debug_tx_peer_stats_enable(ar);
++	if (ret) {
++		ath10k_warn(ar, "failed to enable peer stats pktlog: %d\n", ret);
++		goto err_stop;
++	}
++
+ 	ret = ath10k_smart_ant_enable(ar, arvif);
+ 	if (ret) {
+ 		ath10k_warn(ar, "failed to enable smart antenna algorithm %d\n",
+--- a/drivers/net/wireless/ath/ath10k/htt.c
++++ b/drivers/net/wireless/ath/ath10k/htt.c
+@@ -137,6 +137,8 @@ static const enum htt_t2h_msg_type htt_1
+ 				HTT_T2H_MSG_TYPE_STATS_NOUPLOAD,
+ 	[HTT_10_4_T2H_MSG_TYPE_TX_MODE_SWITCH_IND] =
+ 				HTT_T2H_MSG_TYPE_TX_MODE_SWITCH_IND,
++	[HTT_10_4_T2H_MSG_TYPE_PEER_STATS] =
++				HTT_T2H_MSG_TYPE_PEER_STATS,
+ };
+ 
+ int ath10k_htt_connect(struct ath10k_htt *htt)
+--- a/drivers/net/wireless/ath/ath10k/htt.h
++++ b/drivers/net/wireless/ath/ath10k/htt.h
+@@ -432,6 +432,7 @@ enum htt_10_4_t2h_msg_type {
+ 	HTT_10_4_T2H_MSG_TYPE_STATS_NOUPLOAD         = 0x18,
+ 	/* 0x19 to 0x2f are reserved */
+ 	HTT_10_4_T2H_MSG_TYPE_TX_MODE_SWITCH_IND     = 0x30,
++	HTT_10_4_T2H_MSG_TYPE_PEER_STATS 	     = 0x31,
+ 	/* keep this last */
+ 	HTT_10_4_T2H_NUM_MSGS
+ };
+@@ -466,6 +467,8 @@ enum htt_t2h_msg_type {
+ 	HTT_T2H_MSG_TYPE_TX_FETCH_IND,
+ 	HTT_T2H_MSG_TYPE_TX_FETCH_CONFIRM,
+ 	HTT_T2H_MSG_TYPE_TX_MODE_SWITCH_IND,
++	HTT_T2H_MSG_TYPE_PEER_STATS,
++
+ 	/* keep this last */
+ 	HTT_T2H_NUM_MSGS
+ };
+@@ -1483,6 +1486,52 @@ struct htt_channel_change {
+ 	__le32 phymode;
+ } __packed;
+ 
++#ifdef CPTCFG_MAC80211_DEBUGFS
++
++#define ATH10K_10_4_TX_STATS_OFFSET	144
++#define ATH10K_10_2_TX_STATS_OFFSET	128
++#define ATH10K_10_2_TX_STATS_OFFSET_V2	136
++#define ATH10K_TX_STATS_NO_OF_COMB_FB	4
++
++struct ath10k_per_peer_tx_stats {
++	u8 ratecode[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	u8 success_pkts[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	__le16 success_bytes[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	u8 retry_pkts[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	__le16 retry_bytes[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	u8 failed_pkts[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	__le16 failed_bytes[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	u8 flags[ATH10K_TX_STATS_NO_OF_COMB_FB];
++	__le32 tx_duration;
++	u8 tx_ppdu_cnt;
++	u8 peer_id;
++	u8 pad[2];
++} __packed;
++
++struct htt_per_peer_tx_stats_ind {
++	__le32	succ_bytes;
++	__le32  retry_bytes;
++	__le32  failed_bytes;
++	u8	ratecode;
++	u8	flags;
++	__le16	peer_id;
++	__le16  succ_pkts;
++	__le16	retry_pkts;
++	__le16	failed_pkts;
++	__le16	tx_duration;
++	__le32	reserved1;
++	__le32	reserved2;
++} __packed;
++
++struct htt_peer_tx_stats {
++	u8 num_ppdu;
++	u8 ppdu_len;
++	u8 version;
++	u8 payload[0];
++}__packed;
++
++#endif /*CPTCFG_MAC80211_DEBUGFS*/
++
+ union htt_rx_pn_t {
+ 	/* WEP: 24-bit PN */
+ 	u32 pn24;
+@@ -1534,6 +1583,7 @@ struct htt_resp {
+ 		struct htt_tx_fetch_confirm tx_fetch_confirm;
+ 		struct htt_tx_mode_switch_ind tx_mode_switch_ind;
+ 		struct htt_channel_change chan_change;
++		struct htt_peer_tx_stats peer_tx_stats;
+ 	};
+ } __packed;
+ 
+--- a/drivers/net/wireless/ath/ath10k/txrx.c
++++ b/drivers/net/wireless/ath/ath10k/txrx.c
+@@ -98,6 +98,7 @@ int ath10k_txrx_tx_unref(struct ath10k_h
+ 
+ 	info = IEEE80211_SKB_CB(msdu);
+ 	memset(&info->status, 0, sizeof(info->status));
++	info->status.rates[0].idx = -1;
+ 	trace_ath10k_txrx_tx_unref(ar, tx_done->msdu_id);
+ 
+ 	if (tx_done->status == HTT_TX_COMPL_STATE_DISCARD) {

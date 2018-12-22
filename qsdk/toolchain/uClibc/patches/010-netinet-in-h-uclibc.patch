@@ -1,0 +1,29 @@
+diff -uNr uClibc-ng-1.0.14_org/include/netinet/in.h uClibc-ng-1.0.14/include/netinet/in.h
+--- uClibc-ng-1.0.14_org/include/netinet/in.h	2016-04-18 10:29:13.000000000 -0700
++++ uClibc-ng-1.0.14/include/netinet/in.h	2016-10-04 20:39:54.894880925 -0700
+@@ -76,6 +76,8 @@
+ #define IPPROTO_DSTOPTS		IPPROTO_DSTOPTS
+     IPPROTO_MTP = 92,	   /* Multicast Transport Protocol.  */
+ #define IPPROTO_MTP		IPPROTO_MTP
++    IPPROTO_BEETPH = 94,   /* IP option pseudo header for BEET	*/
++#define IPPROTO_BEETPH		IPPROTO_BEETPH
+     IPPROTO_ENCAP = 98,	   /* Encapsulation Header.  */
+ #define IPPROTO_ENCAP		IPPROTO_ENCAP
+     IPPROTO_PIM = 103,	   /* Protocol Independent Multicast.  */
+@@ -84,6 +86,8 @@
+ #define IPPROTO_COMP		IPPROTO_COMP
+     IPPROTO_SCTP = 132,	   /* Stream Control Transmission Protocol.  */
+ #define IPPROTO_SCTP		IPPROTO_SCTP
++    IPPROTO_MH = 135,      /* IPv6 mobility header.  */
++#define IPPROTO_MH              IPPROTO_MH
+     IPPROTO_UDPLITE = 136, /* UDP-Lite protocol.  */
+ #define IPPROTO_UDPLITE		IPPROTO_UDPLITE
+     IPPROTO_RAW = 255,	   /* Raw IP packets.  */
+@@ -91,7 +95,6 @@
+     IPPROTO_MAX
+   };
+ 
+-
+ /* Type to represent a port.  */
+ typedef uint16_t in_port_t;
+ 

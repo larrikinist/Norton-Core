@@ -1,0 +1,88 @@
+--- a/drivers/net/wireless/ath/wil6210/cfg80211.c
++++ b/drivers/net/wireless/ath/wil6210/cfg80211.c
+@@ -437,10 +437,13 @@ static int wil_cfg80211_scan(struct wiphy *wiphy,
+ 	wil_dbg_misc(wil, "%s(), wdev=0x%p iftype=%d\n",
+ 		     __func__, wdev, wdev->iftype);
+ 
++	mutex_lock(&wil->p2p_wdev_mutex);
+ 	if (wil->scan_request) {
+ 		wil_err(wil, "Already scanning\n");
++		mutex_unlock(&wil->p2p_wdev_mutex);
+ 		return -EAGAIN;
+ 	}
++	mutex_unlock(&wil->p2p_wdev_mutex);
+ 
+ 	/* check we are client side */
+ 	switch (wdev->iftype) {
+--- a/drivers/net/wireless/ath/wil6210/main.c
++++ b/drivers/net/wireless/ath/wil6210/main.c
+@@ -870,6 +870,7 @@ int wil_reset(struct wil6210_priv *wil, bool load_fw)
+ 	bitmap_zero(wil->status, wil_status_last);
+ 	mutex_unlock(&wil->wmi_mutex);
+ 
++	mutex_lock(&wil->p2p_wdev_mutex);
+ 	if (wil->scan_request) {
+ 		wil_dbg_misc(wil, "Abort scan_request 0x%p\n",
+ 			     wil->scan_request);
+@@ -877,6 +878,7 @@ int wil_reset(struct wil6210_priv *wil, bool load_fw)
+ 		cfg80211_scan_done(wil->scan_request, true);
+ 		wil->scan_request = NULL;
+ 	}
++	mutex_unlock(&wil->p2p_wdev_mutex);
+ 
+ 	wil_mask_irq(wil);
+ 
+@@ -1069,6 +1071,7 @@ int __wil_down(struct wil6210_priv *wil)
+ 
+ 	wil_p2p_stop_radio_operations(wil);
+ 
++	mutex_lock(&wil->p2p_wdev_mutex);
+ 	if (wil->scan_request) {
+ 		wil_dbg_misc(wil, "Abort scan_request 0x%p\n",
+ 			     wil->scan_request);
+@@ -1076,6 +1079,7 @@ int __wil_down(struct wil6210_priv *wil)
+ 		cfg80211_scan_done(wil->scan_request, true);
+ 		wil->scan_request = NULL;
+ 	}
++	mutex_unlock(&wil->p2p_wdev_mutex);
+ 
+ 	wil_reset(wil, false);
+ 
+--- a/drivers/net/wireless/ath/wil6210/wil6210.h
++++ b/drivers/net/wireless/ath/wil6210/wil6210.h
+@@ -657,7 +657,7 @@ struct wil6210_priv {
+ 
+ 	/* P2P_DEVICE vif */
+ 	struct wireless_dev *p2p_wdev;
+-	struct mutex p2p_wdev_mutex; /* protect @p2p_wdev */
++	struct mutex p2p_wdev_mutex; /* protect @p2p_wdev and @scan_request */
+ 	struct wireless_dev *radio_wdev;
+ 
+ 	/* High Access Latency Policy voting */
+--- a/drivers/net/wireless/ath/wil6210/wmi.c
++++ b/drivers/net/wireless/ath/wil6210/wmi.c
+@@ -424,6 +424,7 @@ static void wmi_evt_tx_mgmt(struct wil6210_priv *wil, int id, void *d, int len)
+ static void wmi_evt_scan_complete(struct wil6210_priv *wil, int id,
+ 				  void *d, int len)
+ {
++	mutex_lock(&wil->p2p_wdev_mutex);
+ 	if (wil->scan_request) {
+ 		struct wmi_scan_complete_event *data = d;
+ 		bool aborted = (data->status != WMI_SCAN_SUCCESS);
+@@ -433,14 +434,13 @@ static void wmi_evt_scan_complete(struct wil6210_priv *wil, int id,
+ 			     wil->scan_request, aborted);
+ 
+ 		del_timer_sync(&wil->scan_timer);
+-		mutex_lock(&wil->p2p_wdev_mutex);
+ 		cfg80211_scan_done(wil->scan_request, aborted);
+ 		wil->radio_wdev = wil->wdev;
+-		mutex_unlock(&wil->p2p_wdev_mutex);
+ 		wil->scan_request = NULL;
+ 	} else {
+ 		wil_err(wil, "SCAN_COMPLETE while not scanning\n");
+ 	}
++	mutex_unlock(&wil->p2p_wdev_mutex);
+ }
+ 
+ static void wmi_evt_survey_complete(struct wil6210_priv *wil, int id,
+

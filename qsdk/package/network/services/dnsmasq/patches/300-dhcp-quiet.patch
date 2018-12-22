@@ -1,0 +1,13 @@
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -795,8 +795,10 @@ int main (int argc, char **argv)
+   
+ 
+ #ifdef HAVE_DHCP
++#ifdef SYMC_ENABLE_VERBOSE_LOGGING_ON_STARTUP
+   for (context = daemon->dhcp; context; context = context->next)
+     log_context(AF_INET, context);
++#endif
+ 
+   for (relay = daemon->relay4; relay; relay = relay->next)
+     log_relay(AF_INET, relay);

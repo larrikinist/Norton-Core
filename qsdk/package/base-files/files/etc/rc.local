@@ -1,0 +1,49 @@
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+# Enable NSS.
+/etc/init.d/qca-nss-ecm start
+
+# Disable routing redirect messages.
+echo 0 > /proc/sys/net/ipv4/conf/all/send_redirects
+echo 0 > /proc/sys/net/ipv4/conf/br-lan/send_redirects
+
+# If not onboard yet (we use the presence of settings_from_cloud/settings.json as an indicator), 
+# disable ip forwarding. cloud-proxy will enable it after onboard.
+ROVER_DIR=/opt/symantec/rover
+CLOUD_SETTING_FILE=$ROVER_DIR/data_transfer/settings_from_cloud/settings.json
+[ ! -d $ROVER_DIR -o -f $CLOUD_SETTING_FILE ] || echo 0 > /proc/sys/net/ipv4/ip_forward
+
+# Update boot count stored in atmel ecc508
+ecc508 rover-set-boot-count
+
+
+# NSS QoS must be configured after NSS started.
+# We configure it once, here and enable/disable it by iptables chain
+# Give some delay for nss to start
+CLOUD_BINS_DIR=/opt/symantec/rover/bin
+CLOUD_QOS_CONFIG=$CLOUD_BINS_DIR/tc_config.sh
+[ -d $CLOUD_BINS_DIR -a -f $CLOUD_QOS_CONFIG ] && $CLOUD_QOS_CONFIG
+
+# If the board is a Venus board, identified by the first 3 char of serial number (100),
+# Replace default Rover boarddata with Venus boarddata                     
+local serial_number=$(fw_printenv serialnumber | cut -d '=' -f2)
+local board_type_id=${serial_number:0:3}
+local boarddata_dir=/lib/firmware/QCA9984
+# For geo_expansion, get country from uci and install corresponding boarddata 
+local country=us
+if [ $board_type_id = "100" ]; then
+	if [ -f $boarddata_dir/boarddata_venus_country ]; then
+		boarddata_country=$(cat $boarddata_dir/boarddata_venus_country)
+	fi
+	if [ ! -f $boarddata_dir/boarddata_venus_country ] || [ $country != $boarddata_country ]; then
+		if [ -d $boarddata_dir/boarddata_venus/$country ]; then
+			cp -r $boarddata_dir/boarddata_venus/$country/* $boarddata_dir/hw.1
+			echo $country > $boarddata_dir/boarddata_venus_country
+		else
+			logger "No venus $country board data, use default"
+		fi
+	fi
+fi
+
+exit 0
